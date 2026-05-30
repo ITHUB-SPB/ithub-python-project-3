@@ -46,14 +46,17 @@ def create(
 
     user = session.execute(
         select(models.User).where(models.User.username == author.username)
-    ).scalar_one()
+    ).unique().scalar_one_or_none()
+    
+    if not user:
+        raise ValueError(f"Пользователь {author.username} не найден")
     
     existing = session.execute(
         select(models.Dream).where(
             models.Dream.author_id == author.username,
             models.Dream.description == new_dream.description
         )
-    ).scalar_one_or_none()
+    ).unique().scalar_one_or_none()
     
     if existing:
         raise DuplicateDatabaseException("Сон уже существует")
