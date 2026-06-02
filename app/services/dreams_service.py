@@ -1,78 +1,98 @@
-import sqlite3
+Skip to content
+ITHUB-SPB
+ithub-python-project-3
+Repository navigation
+Code
+Issues
+Pull requests
+Actions
+Projects
+Wiki
+Security and quality
+Insights
+Settings
+ithub-python-project-3/app/services
+/dreams_service.py
+Go to file
+t
+T
+gwanlijanari
+gwanlijanari
+2
+c7512cb
+ · 
+2 weeks ago
+69 lines (54 loc) · 1.81 KB
+
+Code
+
+Blame
 from collections.abc import Sequence
-
-from sqlalchemy import Select, select, func
+from datetime import datetime
+from sqlalchemy import select, func, desc
 from sqlalchemy.orm import Session, joinedload
-
 from app import schema
 from app.database import models
 from app.database.exceptions import DuplicateDatabaseException
 
-
 def get_by_id(session: Session, id: int) -> models.Dream | None:
-
-    stmt = select(models.Dream).options(joinedload(models.Dream.author)).where(models.Dream.id == id)
-    return session.execute(stmt).unique().scalar_one_or_none()
+	session.expire_all()
+	return session.execute(
+		select(models.Dream).where(models.Dream.id == id)
+	).unique().scalar_one_or_none()
 
 
 def get_list(
-    *,
-    session: Session,
-    limit: int,
-    offset: int,
-    author: str | None = None,
+	*,
+	session: Session,
+	limit: int,
+	offset: int,
+	author: str | None = None,
 ) -> tuple[Sequence[models.Dream], int]:
+	session.expire_all()
 
-    query = select(models.Dream).options(joinedload(models.Dream.author))
-    
-    if author:
-        query = query.where(models.Dream.author.has(models.User.username.ilike(f'%{author}%')))
-    
-    count_query = select(func.count()).select_from(models.Dream)
-    if author:
-        count_query = count_query.where(models.Dream.author.has(models.User.username.ilike(f'%{author}%')))
-    
-    total_count = session.execute(count_query).scalar()
-    
-    query = query.order_by(models.Dream.created_at.desc()).offset(offset).limit(limit)
-    dreams = session.execute(query).unique().scalars().all()
-    
-    return dreams, total_count
+	query = select(models.Dream).options(joinedload(models.Dream.author)).order_by(models.Dream.id.desc())
+	count_query = select(func.count(models.Dream.id))
+
+	if author:
+		query = query.where(models.Dream.author_id.ilike(f"%{author}%"))
+		count_query = count_query.where(models.Dream.author_id.ilike(f"%{author}%"))
+
+	total = session.execute(count_query).scalar() or 0
+	dreams = session.execute(query.limit(limit).offset(offset)).unique().scalars().all()
+
+	return dreams, total
 
 
 def create(
-    *, session: Session, new_dream: schema.NewDream, author: schema.UserProfile
+	*, session: Session, new_dream: schema.NewDream, author: schema.UserProfile
 ) -> models.Dream:
-
-    user = session.execute(
-        select(models.User).where(models.User.username == author.username)
-    ).unique().scalar_one_or_none()
-    
-    if not user:
-        raise ValueError(f"Пользователь {author.username} не найден")
-    
-    existing = session.execute(
-        select(models.Dream).where(
-            models.Dream.author_id == author.username,
-            models.Dream.description == new_dream.description
-        )
-    ).unique().scalar_one_or_none()
-    
-    if existing:
-        raise DuplicateDatabaseException("Сон уже существует")
-    
-    dream = models.Dream(
-        author_id=author.username,
-        description=new_dream.description,
-        author=user
-    )
-    session.add(dream)
-    session.flush()
-    return dream
+	existing = session.execute(
+		select(models.Dream).where(
+			models.Dream.author_id == author.username,
+			models.Dream.description == new_dream.description
+		)
+	).unique().first()
+	
+	if existing:
+		raise DuplicateDatabaseException('дубликат')
+	
+	dream = models.Dream(
+		author_id=author.username,
+		description=new_dream.description,
+		created_at=datetime.now()
+	)
+	
+	session.add(dream)
+	session.commit()
+	session.expire_all()
+	
+	return dream
 
 
 def delete(*, session: Session, dream_id: int) -> None:
-    dream = session.execute(
-        select(models.Dream).where(models.Dream.id == dream_id)
-    ).scalar_one()
-    session.delete(dream)
+	dream = session.get(models.Dream, dream_id)
+	if dream:
+		session.delete(dream)
+		session.commit()
+		session.expire_all()

@@ -1,26 +1,31 @@
-from sqlite3 import Cursor
-
+from sqlalchemy.orm import Session
 from app import schema
+from app.database import models
 from app.security import create_access_token, get_password_hash, verify_password
+from app.services import users_service
+
+def register(*, session: Session, user_data: schema.UserCreate) -> None:
+	hashed = get_password_hash(user_data.password)
+	
+	new_user = models.User(
+		username=user_data.username,
+		password=hashed
+	)
+	session.add(new_user)
+	session.commit()
+	session.expire_all()
 
 
-def register(*, cursor: Cursor, user_data: schema.UserCreate) -> None:
-    hashed_password = get_password_hash(user_data.password)
-    cursor.execute(
-        "INSERT INTO users (username, password) VALUES (?, ?)",
-        (user_data.username, hashed_password)
-    )
+def authenticate(*, session: Session, user_data: schema.UserCreate) -> str | None:
+	session.expire_all()
+	user = users_service.get_user_with_password(session=session, username=user_data.username)
+	
+	if not user:
+		return None
+	
+	username, hashed = user
 
-
-def authenticate(*, cursor: Cursor, user_data: schema.UserCreate) -> str | None:
-
-    cursor.execute("SELECT password FROM users WHERE username = ?", (user_data.username,))
-    row = cursor.fetchone()
-    if not row:
-        return None
-    
-    hashed_password = row[0]
-    if not verify_password(user_data.password, hashed_password):
-        return None
-    
-    return create_access_token(user_data.username)
+	if not verify_password(user_data.password, hashed):
+		return None
+	
+	return create_access_token(subject=username)
