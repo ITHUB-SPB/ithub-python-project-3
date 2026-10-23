@@ -1,26 +1,37 @@
-from sqlite3 import Cursor
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app import schema
-from app.security import create_access_token, get_password_hash, verify_password
+from app import schema, security
+from app.database import models
 
-
-def register(*, cursor: Cursor, user_data: schema.UserCreate) -> None:
-	"""
-	:cursor: курсор подключения к базе данных
-	:user_data: данные для регистрации
-
-	Добавляет пользователя в базу данных (хешируя пароль)
-	"""
-
-	raise NotImplementedError
+# from app.security import create_access_token, get_password_hash, verify_password
 
 
-def authenticate(*, cursor: Cursor, user_data: schema.UserCreate) -> str | None:
-	"""
-	Находит пользователя по юзернейму,
-	сверяет хеш переданного пароля с истинным.
-	В случае несовпадения возвращает None.
-	Иначе - создает и возвращает токен доступа.
-	"""
+def register(*, session: Session, user_data: schema.User) -> models.User:
+	new_user = models.User(
+		username=user_data.username,
+		password=security.get_password_hash(user_data.password),
+		role='user',
+	)
 
-	raise NotImplementedError
+	session.add(new_user)
+	session.commit()
+	session.refresh(new_user)
+
+	return new_user
+
+
+def authenticate(*, session: Session, user_data: schema.User) -> str | None:
+	user = (
+		session.scalars(select(models.User).where(models.User.username == user_data.username))
+		.unique()
+		.one()
+	)
+
+	if not user.password:
+		return None
+
+	if not security.verify_password(user_data.password, user.password):
+		return None
+
+	return security.create_access_token(subject=schema.JwtSubject.model_validate(user))

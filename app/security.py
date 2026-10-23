@@ -3,12 +3,13 @@ from datetime import UTC, datetime, timedelta
 import jwt
 from pwdlib import PasswordHash
 
+from app import schema
 from app.config import settings
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: schema.JwtSubject) -> str:
 	expire = datetime.now(UTC) + timedelta(minutes=settings.JWT_EXPIRE)
-	to_encode = {'exp': expire, 'sub': subject}
+	to_encode = {'exp': expire, 'sub': subject.model_dump()}
 	return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 

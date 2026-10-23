@@ -1,57 +1,68 @@
-import logging
 import os
 import sys
-from random import choice
 
-from faker import Faker
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exc, select
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 
+from app import schema
 from app.database import Base, SessionLocal, engine, models
 from app.security import get_password_hash
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 
 def main() -> None:
-	Base.metadata.create_all(bind=engine)
+	with SessionLocal(bind=engine) as session:
+		try:
+			session.execute(delete(models.Record))
+			session.execute(delete(models.Course))
+			session.execute(delete(models.User))
+			session.commit()
+		except exc.OperationalError:
+			session.rollback()
 
-	db = SessionLocal()
+	with SessionLocal(bind=engine) as session:
+		Base.metadata.create_all(bind=engine)
+		session.commit()
 
-	logger.info('Cleanup')
-	db.execute(delete(models.Dream))
-	db.execute(delete(models.User))
+	with SessionLocal(bind=engine) as session:
+		try:
+			session.add(
+				models.User(
+					username='testuser', password=get_password_hash('testuserpassword'), role='user'
+				)
+			)
 
-	fake = Faker()
+			session.add(
+				models.User(
+					username='testadmin',
+					password=get_password_hash('testadminpassword'),
+					role='admin',
+				)
+			)
 
-	logger.info('Generate 50 users')
+			session.commit()
 
-	password = get_password_hash('password')
+			users = (session.scalars(select(models.User))).unique().all()
 
-	for _ in range(50):
-		user = models.User(
-			username=fake.name(),
-			password=password,
-		)
-		db.add(user)
+			print('Created users')
+			print([schema.UserResponse.model_validate(user) for user in users])
 
-	db.commit()
+		except exc.IntegrityError:
+			session.commit()
 
-	users = (db.scalars(select(models.User))).unique().all()
+	with SessionLocal(bind=engine) as session:
+		for course in [
+			{'id': 'algorithms', 'title': 'Алгоритмы'},
+			{'id': 'python', 'title': 'Основы Python'},
+			{'id': 'devops', 'title': 'Основы DevOps'},
+		]:
+			session.add(models.Course(id=course['id'], title=course['title']))
+			session.commit()
 
-	logger.info('Generate 500 dreams')
+		courses = (session.scalars(select(models.Course))).unique().all()
 
-	for _ in range(500):
-		dream = models.Dream(
-			description=fake.paragraph(),
-		)
-
-		dream.author = choice(users)
-		db.add(dream)
-
-	db.commit()
+		print('Generated courses')
+		print([schema.Course.model_validate(course) for course in courses])
 
 
 if __name__ == '__main__':

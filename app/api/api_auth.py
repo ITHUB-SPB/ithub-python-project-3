@@ -1,8 +1,9 @@
 from fastapi import APIRouter, status
 
 from app import schema
-from app.api.exceptions import ConflictHTTPException, LoginHTTPException, CredentialsHTTPException, NotFoundHTTPException
-from app.api.dependencies import OAuth2Form, CurrentUser, CursorDatabase
+from app.api import exceptions
+from app.api.dependencies import OAuth2Form, CurrentUser, SessionDatabase
+
 from app.services import auth_service, users_service
 
 
@@ -19,8 +20,8 @@ auth_router = APIRouter(prefix='/auth', tags=['Аккаунты'])
 	},
 )
 def register(
-	cursor: CursorDatabase,
-	new_user_payload: schema.UserCreate,
+	session: SessionDatabase,
+	new_user_payload: schema.User,
 ) -> None:
 	"""
 	Запрашивает users_service на предмет наличия пользователя с переданным именем.
@@ -28,7 +29,10 @@ def register(
 	Иначе - проводит регистрацию через auth_service.
 	"""
 
-	raise NotImplementedError
+	if users_service.get_by_username(session=session, username=new_user_payload.username):
+		raise exceptions.ConflictHTTPException
+
+	auth_service.register(session=session, user_data=new_user_payload)
 
 
 @auth_router.post(
@@ -42,7 +46,7 @@ def register(
 	},
 )
 def login(
-	cursor: CursorDatabase,
+	session: SessionDatabase,
 	user_credentials: OAuth2Form,
 ) -> schema.UserToken:
 	"""
@@ -52,20 +56,33 @@ def login(
 	выбрасывает LoginHTTPException с пояснением. Иначе - возвращает токен согласно схеме.
 	"""
 
-	raise NotImplementedError
+	if not users_service.get_by_username(session=session, username=user_credentials.username):
+		raise exceptions.LoginHTTPException(detail='Пользователь не найден')
+
+	token = auth_service.authenticate(
+		session=session,
+		user_data=schema.User(
+			username=user_credentials.username, password=user_credentials.password
+		),
+	)
+
+	if not token:
+		raise exceptions.LoginHTTPException(detail='Неверный логин или пароль')
+
+	return schema.UserToken(access_token=token)
 
 
 @auth_router.get(
 	'/me',
 	summary='Информация о текущем залогиненном пользователе',
-	response_model=schema.UserProfile,
+	response_model=schema.UserResponse,
 	responses={
 		status.HTTP_401_UNAUTHORIZED: {'description': 'Ошибка токена или пользовательских данных'},
 	},
 )
 def get_current(
 	current_user: CurrentUser,
-) -> schema.UserProfile:
+) -> schema.UserResponse:
 	"""
 	Получает текущего пользователя через инъекцию зависимостей, в случае
 	ошибки выбрасывает CredentialsHTTPException. Иначе - отвечает согласно схеме.

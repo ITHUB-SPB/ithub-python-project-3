@@ -6,77 +6,46 @@ from pydantic import ConfigDict, Field, field_serializer
 
 
 class BaseModel(PBaseModel):
-	"""
-	Расширенная базовая модель, позволяет
-	красивее обрабатывать данные ORM-слоя
-	(правда отдельным методом, который вам
-	придётся разузнать)
-	"""
-
 	model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
 
-class UserToken(BaseModel):
-	"""
-	Схема данных для oauth2-токенов, не требует изменений
-	"""
+class Course(BaseModel):
+	id: str
+	title: str
 
+
+class UserToken(BaseModel):
 	access_token: str
 	token_type: Literal['bearer'] = 'bearer'
 
 
-class UserCreate(BaseModel):
-	"""
-	TODO
-	Схема данных для создания пользователя
-
-	:username: строка длиной не менее 2 символов
-	:password: строка длиной не менее 8 символов
-	"""
-
-	pass
+class JwtSubject(BaseModel):
+	username: str
+	role: Literal['user'] | Literal['admin']
 
 
-class UserProfile(BaseModel):
-	"""
-	TODO
-	Схема данных для публичной информации пользователя
-
-	:username: строка
-	"""
-
-	pass
+class User(BaseModel):
+	username: str = Field(..., min_length=2)
+	password: str = Field(..., min_length=6)
+	role: Literal['user'] | Literal['admin'] | None = Field(default='user')
 
 
-class Dream(BaseModel):
-	"""
-	TODO
-	Схема для выдачи данных сна
-
-	:id: целое число
-	:description: строка описания
-	:author: строка, юзернейм автора
-	:created_at: строка, дататайм формата ISO
-	"""
-
-	pass
+class UserResponse(User):
+	password: str = Field(..., min_length=6, exclude=True)
 
 
-class NewDream(BaseModel):
-	"""
-	TODO
-	Схема данных для создания нового сна
-
-	:description: строка длиной не менее 5
-	"""
-
-	pass
+class RecordResponse(BaseModel):
+	id: int
+	created_at: datetime
+	course: Course
+	author: User
 
 
-class MultipleDreams(BaseModel):
-	"""
-	:dreams: список Dream-ов
-	:dreams_count: количество снов в подвыборке, целое число
-	"""
+class RecordCreate(BaseModel):
+	author_id: str
+	course_id: str
 
-	pass
+
+class RecordsListResponse(BaseModel):
+	records: list[RecordResponse]
+	records_count: int

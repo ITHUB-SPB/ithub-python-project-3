@@ -1,11 +1,11 @@
-import sqlite3
+from sqlalchemy import exc
 
 
-class DuplicateDatabaseException(sqlite3.IntegrityError):
+class DuplicateDatabaseException(exc.IntegrityError):
 	def __init__(self, message: str | None = 'Запись уже существует'):
-		super().__init__(message)
+		super().__init__(message, params=None)
 
 
-class NotFoundDatabaseException(sqlite3.IntegrityError):
+class NotFoundDatabaseException(exc.NoResultFound):
 	def __init__(self, message: str | None = 'Запись не найдена'):
 		super().__init__(message)

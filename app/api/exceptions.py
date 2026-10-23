@@ -16,10 +16,10 @@ class CredentialsHTTPException(HTTPException):
 
 
 class LoginHTTPException(HTTPException):
-	def __init__(self):
+	def __init__(self, detail='Некорректное имя или пароль'):
 		super().__init__(
 			status_code=status.HTTP_401_UNAUTHORIZED,
-			detail='Некорректное имя или пароль',
+			detail=detail,
 			headers={'WWW-Authenticate': 'Bearer'},
 		)
 
