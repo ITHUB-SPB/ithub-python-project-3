@@ -2,10 +2,8 @@ from fastapi import APIRouter, status
 
 from app import schema
 from app.api import exceptions
-from app.api.dependencies import OAuth2Form, CurrentUser, SessionDatabase
-
+from app.api.dependencies import CurrentUser, OAuth2Form, SessionDatabase
 from app.services import auth_service, users_service
-
 
 auth_router = APIRouter(prefix='/auth', tags=['Аккаунты'])
 
@@ -23,12 +21,6 @@ def register(
 	session: SessionDatabase,
 	new_user_payload: schema.User,
 ) -> None:
-	"""
-	Запрашивает users_service на предмет наличия пользователя с переданным именем.
-	Если пользователь найден, выбрасывает ConflictHTTPException с пояснением.
-	Иначе - проводит регистрацию через auth_service.
-	"""
-
 	if users_service.get_by_username(session=session, username=new_user_payload.username):
 		raise exceptions.ConflictHTTPException
 

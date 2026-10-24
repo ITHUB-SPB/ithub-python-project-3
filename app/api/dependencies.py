@@ -34,8 +34,9 @@ def _get_current_user(
 	token: TokenDependency,
 ) -> schema.UserResponse:
 	try:
-		username = security.decode_access_token(token)
-		user = users_service.get_by_username(session=session, username=username)
+		jwt_payload = security.decode_access_token(token)
+
+		user = users_service.get_by_username(session=session, username=jwt_payload.username)
 		if not user:
 			raise NotFoundHTTPException(detail='Пользователь не найден')
 		return user

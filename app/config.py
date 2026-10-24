@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 	DEBUG: bool = os.getenv('PYTHON_ENVIRONMENT') != 'testing'
 
 	JWT_SECRET_KEY: str = secrets.token_urlsafe(32)
-	JWT_EXPIRE: int = 60 * 24 * 8
+	JWT_EXPIRE: int = 60 * 3
 	JWT_ALGORITHM: typing.Literal['HS256'] = 'HS256'
 
 	PASSWORD_SALT: bytes = secrets.token_bytes(32)

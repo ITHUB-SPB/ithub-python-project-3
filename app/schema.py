@@ -21,13 +21,13 @@ class UserToken(BaseModel):
 
 class JwtSubject(BaseModel):
 	username: str
-	role: Literal['user'] | Literal['admin']
+	role: Literal['user', 'admin']
 
 
 class User(BaseModel):
 	username: str = Field(..., min_length=2)
 	password: str = Field(..., min_length=6)
-	role: Literal['user'] | Literal['admin'] | None = Field(default='user')
+	role: Literal['user', 'admin'] | None = Field(default='user')
 
 
 class UserResponse(User):
@@ -38,11 +38,10 @@ class RecordResponse(BaseModel):
 	id: int
 	created_at: datetime
 	course: Course
-	author: User
+	author: UserResponse
 
 
 class RecordCreate(BaseModel):
-	author_id: str
 	course_id: str
 
 

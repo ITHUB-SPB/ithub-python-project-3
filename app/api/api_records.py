@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Path, Query, status
+from sqlalchemy import exc as dbExceptions
 
 from app import schema
 from app.api.dependencies import CurrentUser, SessionDatabase
 from app.api.exceptions import (
 	ConflictHTTPException,
 	CredentialsHTTPException,
+	NotAuthorizedHTTPException,
 	NotFoundHTTPException,
 )
-from app.database.exceptions import DuplicateDatabaseException
 from app.services import records_service
 
 records_router = APIRouter(
@@ -25,70 +26,67 @@ records_router = APIRouter(
 		status.HTTP_422_UNPROCESSABLE_CONTENT: {'description': 'Параметры запроса не валидные'}
 	},
 )
-def get_dreams_list(
+def get_records_list(
 	session: SessionDatabase,
-	limit: int = Query(20, title='Количество снов (по умолчанию 20)'),
+	limit: int = Query(20, title='Количество записей (по умолчанию 20)'),
 	offset: int = Query(0, title='Величина отступа (по умолчанию  0)'),
 	author: str = Query(None, title='Фильтр по юзернейму автора'),
+	course: str = Query(None, title='Фильтр по курсу'),
 ) -> schema.RecordsListResponse:
-	"""
-	Запрашивает dreams_service, возвращает результат согласно схеме.
-
-	Примечание: здесь и далее при сериализации ответа будет красиво
-	воспользоваться упомянутым в schema.py методом валидации ORM-слоя
-	"""
-
-	raise NotImplementedError
+	return records_service.get_records_list(
+		session=session, limit=limit, offset=offset, course=course, author=author
+	)
 
 
 @records_router.post(
 	'/',
-	summary='Добавление сна',
-	description='Добавление сна (требуется авторизация)',
+	summary='Добавление записи',
+	description='Добавление записи (требуется авторизация)',
 	response_model=schema.RecordResponse,
 	status_code=201,
 	responses={
 		status.HTTP_401_UNAUTHORIZED: {'description': 'Ошибка токена или пользовательских данных'},
-		status.HTTP_409_CONFLICT: {'description': 'Пользователь уже добавлял этот сон'},
+		status.HTTP_409_CONFLICT: {'description': 'Пользователь уже добавлял запись на этот курс'},
 		status.HTTP_422_UNPROCESSABLE_CONTENT: {'description': 'Данные не валидны'},
 	},
 )
-def create_dream(
+def create_record(
 	current_user: CurrentUser,
 	session: SessionDatabase,
-	new_dream_payload: schema.RecordCreate,
+	new_record_payload: schema.RecordCreate,
 ) -> schema.RecordResponse:
-	"""
-	Получает текущего пользователя через инъекцию зависимостей,
-	в случае ошибки выбрасывает CredentialsHTTPException.
-	Иначе - запрашивает dreams_service на создание сна. В случае
-	ошибки дублирования выбрасывает ConflictHTTPException с пояснением.
-	Иначе - возвращает результат согласно схеме.
-	"""
+	print(current_user)
+	if not current_user:
+		raise CredentialsHTTPException
 
-	raise NotImplementedError
+	try:
+		new_record = records_service.create_record(
+			session=session, author_id=current_user.username, course_id=new_record_payload.course_id
+		)
+		return schema.RecordResponse.model_validate(new_record)
+	except dbExceptions.IntegrityError:
+		raise ConflictHTTPException
 
 
 @records_router.get(
 	'/{id}',
-	summary='Чтение сна',
+	summary='Чтение записи',
 	response_model=schema.RecordResponse,
 	responses={
-		status.HTTP_404_NOT_FOUND: {'description': 'Сон не найден'},
+		status.HTTP_404_NOT_FOUND: {'description': 'Запись не найдена'},
 		status.HTTP_422_UNPROCESSABLE_CONTENT: {'description': 'Идентификатор не валиден'},
 	},
 )
-def get_dream(
+def get_record(
 	session: SessionDatabase,
-	id: int = Path(..., title='Идентификатор сна для чтения'),
+	id: int = Path(..., title='Идентификатор записи для чтения'),
 ) -> schema.RecordResponse:
-	"""
-	Запрашивает dreams_service на получение сна по идентификатору.
-	Если сон не найден, выбрасывает NotFoundHTTPException c пояснением.
-	Иначе - возвращает результат согласно схеме
-	"""
+	record = records_service.get_record_by_id(session=session, id=id)
 
-	raise NotImplementedError
+	if not record:
+		raise NotFoundHTTPException
+
+	return schema.RecordResponse.model_validate(record)
 
 
 @records_router.delete(
@@ -98,24 +96,25 @@ def get_dream(
 	status_code=204,
 	responses={
 		status.HTTP_401_UNAUTHORIZED: {'description': 'Ошибка токена или пользовательских данных'},
-		status.HTTP_404_NOT_FOUND: {'description': 'Сон не найден'},
-		status.HTTP_403_FORBIDDEN: {'description': 'Пользователь не является автором сна'},
+		status.HTTP_404_NOT_FOUND: {'description': 'Запись не найдена'},
+		status.HTTP_403_FORBIDDEN: {'description': 'Пользователь не является автором записи'},
 		status.HTTP_422_UNPROCESSABLE_CONTENT: {'description': 'Идентификатор не валиден'},
 	},
 )
-def delete(
+def delete_record(
 	current_user: CurrentUser,
 	session: SessionDatabase,
-	id: int = Path(..., title='Идентификатор сна для удаления'),
+	id: int = Path(..., title='Идентификатор записи для удаления'),
 ) -> None:
-	"""
-	Получает текущего пользователя через инъекцию зависимостей,
-	в случае ошибки выбрасывает CredentialsHTTPException.
-	Иначе - запрашивает dreams_service на получение сна по идентификатору.
-	Если сон не найден, выбрасывает NotFoundHTTPException c пояснением.
-	Иначе - проверяет, является ли текущий пользователь автором сна, который
-	он хочет удалить. Если нет - выбрасывает исключение c пояснением.
-	Иначе - запрашивает dreams_service на удаление сна.
-	"""
+	if not current_user:
+		raise CredentialsHTTPException
 
-	raise NotImplementedError
+	record_to_delete = records_service.get_record_by_id(session=session, id=id)
+
+	if not record_to_delete:
+		raise NotFoundHTTPException
+
+	if not record_to_delete.author_id == current_user.username:
+		raise NotAuthorizedHTTPException
+
+	records_service.delete_record(session=session, record_id=id)
